@@ -129,7 +129,7 @@ export class MockChatClient implements ChatModelClient {
       if (warnings.length) lines.push("Caveats: " + warnings.join(" "));
       parts.push(lines.join("\n"));
     }
-    parts.push("_Hypothesis: none offered — the mock assistant reports observations only. Configure OPENAI_MODE=live for interpreted answers._");
+    parts.push("*Mock assistant: observations only, no hypotheses. Set OPENAI_MODE=live for interpreted answers.*");
     return parts.join("\n\n");
   }
 }

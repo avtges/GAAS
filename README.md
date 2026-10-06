@@ -9,6 +9,16 @@ questions through an AI chat that is grounded only in the connected data.
 - Schema: [`docs/schema.md`](docs/schema.md) and [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql)
 - Status and remaining work: [`docs/implementation-checklist.md`](docs/implementation-checklist.md)
 
+## What it looks like
+
+| | |
+| --- | --- |
+| ![Chat answer with sources, period, freshness and audit](docs/screenshots/5-chat-answer.png) | ![Connections and sync status](docs/screenshots/3-connections.png) |
+| ![Suggested questions](docs/screenshots/4-chat-empty.png) | ![Semantic configuration and delete actions](docs/screenshots/6-settings.png) |
+
+Screenshots are from mock mode, where the assistant lists observations only. With
+`OPENAI_MODE=live` the answer is written by the model from the same tool results.
+
 ## Try it in your browser (GitHub Codespaces, nothing to install)
 
 1. On the repository page on GitHub, click **Code**, then the **Codespaces** tab, then

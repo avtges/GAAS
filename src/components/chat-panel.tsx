@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef } from "react";
 import type { ChatMessage } from "@/lib/chat/service";
 import type { ChatFormState } from "@/app/app/w/[websiteId]/actions";
 import { GroundingFooter } from "@/components/grounding-footer";
+import { Markdown } from "@/components/markdown";
 
 const SUGGESTED = [
   "What changed this week?",
@@ -51,7 +52,7 @@ export function ChatPanel({
           {messages.map((m) => (
             <div key={m.id} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
               <div className={`max-w-[85%] rounded-lg px-4 py-3 text-sm ${m.role === "user" ? "bg-zinc-900 text-white" : "border border-zinc-200 bg-white"}`}>
-                <div className="whitespace-pre-wrap">{m.content}</div>
+                {m.role === "assistant" ? <Markdown text={m.content} /> : <div className="whitespace-pre-wrap">{m.content}</div>}
                 {m.role === "assistant" && m.metadata && <GroundingFooter metadata={m.metadata} />}
               </div>
             </div>
