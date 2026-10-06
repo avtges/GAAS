@@ -4,6 +4,8 @@ import { withServiceDb, withUserDb, many } from "@/lib/db/pool";
 import { badRequest, forbidden } from "@/lib/errors";
 import { getAccessTokenForConnection, getWebsiteConnection, connectionProducts } from "@/lib/google/connections";
 import { getSearchConsoleProvider, type SiteEntry } from "@/lib/providers/search-console";
+import { getGa4Provider, type KeyEvent } from "@/lib/providers/ga4";
+import { isValidTimeZone } from "@/lib/dates";
 import { requireWebsiteAccess, requireWebsiteAdmin, type Source } from "@/lib/websites/service";
 import { runSync } from "@/lib/sync/runner";
 import { log } from "@/lib/logger";
@@ -87,4 +89,55 @@ export async function listRecentSyncJobs(userId: string, websiteId: string, limi
       [websiteId, limit],
     ),
   );
+}
+
+export type Ga4PropertyOption = { propertyId: string; displayName: string; account: string; propertyType: string };
+
+export async function listAvailableGa4Properties(userId: string, websiteId: string): Promise<Ga4PropertyOption[]> {
+  const connectionId = await connectionForProduct(userId, websiteId, "ga4");
+  const { accessToken } = await getAccessTokenForConnection(connectionId);
+  const summaries = await getGa4Provider().listAccountSummaries({ accessToken });
+  const out: Ga4PropertyOption[] = [];
+  for (const a of summaries) {
+    for (const p of a.propertySummaries ?? []) {
+      const id = p.property.replace(/^properties\//, "");
+      if (!/^\d+$/.test(id)) continue;
+      out.push({ propertyId: id, displayName: p.displayName ?? id, account: a.displayName ?? a.account, propertyType: p.propertyType ?? "PROPERTY_TYPE_UNSPECIFIED" });
+    }
+  }
+  return out;
+}
+
+export async function selectGa4Property(userId: string, websiteId: string, input: unknown): Promise<void> {
+  const parsed = z.object({ propertyId: z.string().regex(/^\d{1,20}$/) }).safeParse(input);
+  if (!parsed.success) throw badRequest("Choose a GA4 property.");
+  const website = await requireWebsiteAdmin(userId, websiteId);
+  const available = await listAvailableGa4Properties(userId, websiteId);
+  if (!available.some((p) => p.propertyId === parsed.data.propertyId)) throw forbidden("That GA4 property is not available to the connected Google account.");
+  const connectionId = await connectionForProduct(userId, websiteId, "ga4");
+  const { accessToken } = await getAccessTokenForConnection(connectionId);
+  // Default the website's time zone / currency from the property when still at defaults.
+  const prop = await getGa4Provider().getProperty({ accessToken }, parsed.data.propertyId).catch(() => null);
+  const tz = prop?.timeZone && isValidTimeZone(prop.timeZone) ? prop.timeZone : null;
+  const currency = prop?.currencyCode && /^[A-Z]{3}$/.test(prop.currencyCode) ? prop.currencyCode : null;
+  await withServiceDb((db) =>
+    db.query(
+      `update public.websites set ga4_property_id = $3,
+         timezone = case when timezone = 'UTC' and $4::text is not null then $4 else timezone end,
+         currency = case when currency = 'USD' and $5::text is not null then $5 else currency end
+       where id = $1 and organization_id = $2`,
+      [websiteId, website.organization_id, parsed.data.propertyId, tz, currency],
+    ),
+  );
+  await resetSourceData(website.organization_id, websiteId, "ga4", "ok");
+  log.info("ga4 property selected", { organizationId: website.organization_id, websiteId, propertyId: parsed.data.propertyId });
+  scheduleImmediateSync(websiteId, "ga4");
+}
+
+/** Key events configured in the selected GA4 property (for the semantic-configuration form). */
+export async function listGa4KeyEvents(userId: string, websiteId: string): Promise<KeyEvent[]> {
+  const { website } = await requireWebsiteAccess(userId, websiteId);
+  if (!website.ga4_property_id || !website.google_connection_id) return [];
+  const { accessToken } = await getAccessTokenForConnection(website.google_connection_id);
+  return getGa4Provider().listKeyEvents({ accessToken }, website.ga4_property_id);
 }

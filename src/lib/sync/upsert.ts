@@ -13,7 +13,7 @@ export async function upsertRows(
   batchSize = 500,
 ): Promise<number> {
   if (rows.length === 0) return 0;
-  if (!/^[a-z_]+$/.test(table) || columns.some((c) => !/^[a-z_]+$/.test(c))) throw new Error("invalid identifier");
+  if (!/^[a-z][a-z0-9_]*$/.test(table) || columns.some((c) => !/^[a-z][a-z0-9_]*$/.test(c))) throw new Error("invalid identifier");
   const updateCols = columns.filter((c) => !keyColumns.includes(c));
   const setClause = updateCols.map((c) => `${c} = excluded.${c}`).join(", ");
   let written = 0;
