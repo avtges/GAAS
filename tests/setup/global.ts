@@ -14,5 +14,5 @@ export default function setup() {
   Object.assign(process.env, { NODE_ENV: "test" });
   process.env.GOOGLE_PROVIDER_MODE = "mock";
   process.env.OPENAI_MODE = "mock";
-  process.env.TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY ?? "dGVzdC1rZXktMzItYnl0ZXMtdGVzdC1rZXktMzItYnl0ZQ==";
+  process.env.TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY ?? "64DOYlUWFcQNmv/P2fXuBSaClIQwklj+A0h/1GhJD/I=";
 }
