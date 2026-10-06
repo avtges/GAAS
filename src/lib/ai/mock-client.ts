@@ -85,7 +85,8 @@ export class MockChatClient implements ChatModelClient {
       const label = String(data.source_label ?? data.source ?? "data");
       const range = data.date_range as { start: string; end: string } | undefined;
       const totals = data.totals as Record<string, unknown> | undefined;
-      const changes = data.changes as Record<string, { current: number; previous: number; pct_change: number | null }> | undefined;
+      const rawChanges = data.changes as Record<string, { current: number; previous: number; pct_change: number | null } | null> | undefined;
+      const changes = rawChanges ? Object.fromEntries(Object.entries(rawChanges).filter(([, c]) => c && typeof c === "object" && "current" in c)) as Record<string, { current: number; previous: number; pct_change: number | null }> : undefined;
       const rows = data.rows as Array<Record<string, unknown>> | undefined;
       const warnings = (data.warnings as string[]) ?? [];
       const head = range ? `${label} (${range.start} to ${range.end})` : label;

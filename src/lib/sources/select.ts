@@ -5,6 +5,8 @@ import { badRequest, forbidden } from "@/lib/errors";
 import { getAccessTokenForConnection, getWebsiteConnection, connectionProducts } from "@/lib/google/connections";
 import { getSearchConsoleProvider, type SiteEntry } from "@/lib/providers/search-console";
 import { getGa4Provider, type KeyEvent } from "@/lib/providers/ga4";
+import { getGoogleAdsProvider, type AdsAccount } from "@/lib/providers/google-ads";
+import { GoogleApiError } from "@/lib/providers/errors";
 import { isValidTimeZone } from "@/lib/dates";
 import { requireWebsiteAccess, requireWebsiteAdmin, type Source } from "@/lib/websites/service";
 import { runSync } from "@/lib/sync/runner";
@@ -140,4 +142,56 @@ export async function listGa4KeyEvents(userId: string, websiteId: string): Promi
   if (!website.ga4_property_id || !website.google_connection_id) return [];
   const { accessToken } = await getAccessTokenForConnection(website.google_connection_id);
   return getGa4Provider().listKeyEvents({ accessToken }, website.ga4_property_id);
+}
+
+/**
+ * Google Ads accounts the user can report on: every directly accessible account, plus the
+ * direct client accounts of accessible manager accounts (reached via login-customer-id).
+ * Manager accounts themselves have no campaigns and are not selectable.
+ */
+export async function listAvailableAdsAccounts(userId: string, websiteId: string): Promise<{ accounts: AdsAccount[]; errors: string[] }> {
+  const connectionId = await connectionForProduct(userId, websiteId, "ads");
+  const { accessToken } = await getAccessTokenForConnection(connectionId);
+  const provider = getGoogleAdsProvider();
+  const ids = (await provider.listAccessibleCustomers({ accessToken })).slice(0, 50);
+  const accounts = new Map<string, AdsAccount>();
+  const errors: string[] = [];
+  for (const id of ids) {
+    try {
+      const c = await provider.getCustomer({ accessToken }, id);
+      if (c.manager) {
+        for (const child of await provider.listClientAccounts({ accessToken }, id)) {
+          if (!child.manager && !accounts.has(child.customerId)) accounts.set(child.customerId, child);
+        }
+      } else {
+        accounts.set(c.customerId, c);
+      }
+    } catch (e) {
+      // e.g. a cancelled account or one the developer token level cannot access
+      errors.push(`${id}: ${e instanceof GoogleApiError ? e.message : (e as Error).message}`);
+    }
+  }
+  return { accounts: [...accounts.values()].sort((a, b) => a.descriptiveName.localeCompare(b.descriptiveName)), errors };
+}
+
+export async function selectAdsAccount(userId: string, websiteId: string, input: unknown): Promise<void> {
+  const parsed = z.object({ customerId: z.string().regex(/^\d{10}$/) }).safeParse(input);
+  if (!parsed.success) throw badRequest("Choose a Google Ads account.");
+  const website = await requireWebsiteAdmin(userId, websiteId);
+  const { accounts } = await listAvailableAdsAccounts(userId, websiteId);
+  const account = accounts.find((a) => a.customerId === parsed.data.customerId);
+  if (!account) throw forbidden("That Google Ads account is not available to the connected Google account.");
+  await withServiceDb((db) =>
+    db.query("update public.websites set google_ads_customer_id = $3, google_ads_login_customer_id = $4 where id = $1 and organization_id = $2", [websiteId, website.organization_id, account.customerId, account.loginCustomerId]),
+  );
+  await resetSourceData(website.organization_id, websiteId, "ads", "ok");
+  await withServiceDb((db) =>
+    db.query("update public.website_sources set limitations = $3::jsonb where website_id = $1 and organization_id = $2 and source = 'ads'", [
+      websiteId,
+      website.organization_id,
+      JSON.stringify({ account_time_zone: account.timeZone, account_currency: account.currencyCode, account_name: account.descriptiveName }),
+    ]),
+  );
+  log.info("ads account selected", { organizationId: website.organization_id, websiteId, customerId: account.customerId, viaManager: account.loginCustomerId });
+  scheduleImmediateSync(websiteId, "ads");
 }

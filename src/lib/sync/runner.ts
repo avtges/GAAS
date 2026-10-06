@@ -8,8 +8,9 @@ import type { Source } from "@/lib/websites/service";
 import type { SourceSyncer, SyncKind, SyncOutcome } from "@/lib/sync/types";
 import { syncSearchConsole } from "@/lib/sync/gsc";
 import { syncGa4 } from "@/lib/sync/ga4";
+import { syncGoogleAds } from "@/lib/sync/ads";
 
-const SYNCERS: Partial<Record<Source, SourceSyncer>> = { gsc: syncSearchConsole, ga4: syncGa4 };
+const SYNCERS: Partial<Record<Source, SourceSyncer>> = { gsc: syncSearchConsole, ga4: syncGa4, ads: syncGoogleAds };
 
 export function registerSyncer(source: Source, syncer: SourceSyncer): void {
   SYNCERS[source] = syncer;

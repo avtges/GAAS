@@ -37,7 +37,7 @@ export type ToolDefinition<S extends ZodObject<ZodRawShape> = ZodObject<ZodRawSh
 };
 
 export function defineTool<S extends ZodObject<ZodRawShape>>(def: ToolDefinition<S>): ToolDefinition<S> {
-  if (!/^[a-z_]{3,64}$/.test(def.name)) throw new Error(`invalid tool name ${def.name}`);
+  if (!/^[a-z][a-z0-9_]{2,63}$/.test(def.name)) throw new Error(`invalid tool name ${def.name}`);
   return def;
 }
 
