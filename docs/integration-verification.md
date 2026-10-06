@@ -159,6 +159,17 @@ from a machine with normal network access.
 
 ---
 
+## Answer grounding and hallucination audit (application behaviour, not an external API)
+
+Every assistant answer is audited server-side (`src/lib/ai/audit.ts`): each numeric figure
+must match a value in the tool results for that turn (allowing rounding, separators, k/M
+suffixes and ratio→percent), or appear in the user's question. If any figure is unsupported,
+the model gets exactly one repair round with the list of unsupported figures and no tools.
+The final audit (`supported`, `unsupported`, `repaired`, `initial_unsupported`) is stored in
+the message's grounding metadata and shown under the answer; remaining unsupported figures
+are added to the caveats as "Unverified figures". The audit checks numbers only; it cannot
+detect an unsupported causal claim, which is handled by the system prompt rules.
+
 ## Unverified / must confirm before go-live
 
 | # | Item | Why it matters | Mitigation in code |
@@ -171,4 +182,6 @@ from a machine with normal network access.
 | U6 | Whether `segments.conversion_action_name` can be combined with non-conversion metrics in one GAQL query | Conversion-action breakdown table. | The conversion-action query selects conversion metrics only. |
 | U7 | Vercel cron plan limits and `CRON_SECRET` header behaviour | Scheduling frequency. | Endpoint also callable by any scheduler with the bearer secret. |
 | U8 | OpenAI model availability/pricing for the configured model | Cost. | `OPENAI_MODEL` env var; failures surface as chat errors with no fabricated answer. |
+| U10 | Google Ads REST JSON field casing (camelCase, int64 as strings) in `searchStream` responses | The official library is gRPC-only, so the REST JSON shape was inferred from the standard proto3 JSON mapping. | Every row is Zod-validated (`src/lib/sync/ads-normalize.ts`); a shape mismatch fails the Ads sync with the exact field path and leaves other sources untouched. Confirm with one live call to a test account. |
+| U11 | Whether `search_term_view` returns rows for Performance Max campaigns | Affects "wasted spend" coverage. | The tool warns that PMax and some campaign types may not report search terms. |
 | U9 | Supabase `postgres` role RLS bypass semantics via the pooler | Service-role sync writes. | Migrations use `FORCE ROW LEVEL SECURITY`-free tables owned by the migration role; sync code always filters by `organization_id` and tests cover it against local Postgres. Confirm on the real project that `SET LOCAL ROLE authenticated` is permitted for the connection user. |

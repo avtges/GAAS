@@ -8,6 +8,7 @@ import { getToolRegistry } from "@/lib/ai/tools";
 import type { ToolContext } from "@/lib/ai/tools/registry";
 import { buildGrounding, type ExecutedTool, type GroundingMetadata } from "@/lib/ai/grounding";
 import { buildSystemPrompt } from "@/lib/ai/prompt";
+import { auditAnswer, type AuditResult } from "@/lib/ai/audit";
 import { getSourceFreshness } from "@/lib/analytics/status";
 import { AppError } from "@/lib/errors";
 import type { Website } from "@/lib/websites/service";
@@ -71,7 +72,16 @@ export async function runChatTurn(input: ChatTurnInput, opts: { maxToolRounds?: 
     const text = res.output.filter((o): o is Extract<typeof o, { type: "message" }> => o.type === "message").map((o) => o.text).join("\n");
 
     if (calls.length === 0) {
-      return { content: text || "I could not produce an answer from the available data.", grounding: buildGrounding(executed, model, usage), executed };
+      const draft = text || "I could not produce an answer from the available data.";
+      const final = await auditAndRepair(draft, input.message, items, instructions, executed, (u) => {
+        if (u) usage = { input_tokens: (usage?.input_tokens ?? 0) + u.input_tokens, output_tokens: (usage?.output_tokens ?? 0) + u.output_tokens };
+      });
+      const grounding = buildGrounding(executed, model, usage);
+      grounding.audit = final.audit;
+      if (final.audit.unsupported.length) {
+        grounding.warnings.push(`Unverified figures: ${final.audit.unsupported.join(", ")} could not be matched to the data retrieved for this answer. Treat them with caution.`);
+      }
+      return { content: final.content, grounding, executed };
     }
     if (round === maxRounds) {
       log.warn("tool round limit reached", { websiteId: input.website.id, rounds: round });
@@ -89,6 +99,49 @@ export async function runChatTurn(input: ChatTurnInput, opts: { maxToolRounds?: 
     }
   }
   throw new AiProviderError("Unexpected end of tool loop", false);
+}
+
+/**
+ * Hallucination audit + self-repair: if the draft contains figures that are not in any
+ * tool output, ask the model once to rewrite using only retrieved figures. The audit
+ * result (including whether a repair happened) is stored with the answer.
+ */
+async function auditAndRepair(
+  draft: string,
+  question: string,
+  items: ChatInputItem[],
+  instructions: string,
+  executed: ExecutedTool[],
+  addUsage: (u: { input_tokens: number; output_tokens: number } | null) => void,
+): Promise<{ content: string; audit: AuditResult & { repaired: boolean; initial_unsupported: string[] } }> {
+  const outputs = executed.map((e) => e.envelope ?? { error: e.error });
+  const first = auditAnswer(draft, outputs, [question]);
+  if (first.unsupported.length === 0) return { content: draft, audit: { ...first, repaired: false, initial_unsupported: [] } };
+  log.warn("answer audit found unsupported figures", { unsupported: first.unsupported });
+  try {
+    const repair = await getChatClient().createResponse({
+      instructions,
+      input: [
+        ...items,
+        { type: "message", role: "assistant", content: draft },
+        {
+          type: "message",
+          role: "developer",
+          content: `Audit: these figures in your answer do not appear in any tool result: ${first.unsupported.join(", ")}. Rewrite the answer using only figures present in the tool results above (rounding is fine). If a figure cannot be supported, remove it or say the data is not available. Do not call tools.`,
+        },
+      ],
+      tools: [],
+    });
+    addUsage(repair.usage);
+    const repaired = repair.output.filter((o): o is Extract<typeof o, { type: "message" }> => o.type === "message").map((o) => o.text).join("\n");
+    if (repaired) {
+      const second = auditAnswer(repaired, outputs, [question]);
+      return { content: repaired, audit: { ...second, repaired: true, initial_unsupported: first.unsupported } };
+    }
+  } catch (e) {
+    log.warn("answer repair failed", { error: (e as Error).message });
+  }
+  return { content: draft, audit: { ...first, repaired: false, initial_unsupported: first.unsupported } };
 }
 
 async function executeTool(registry: ReturnType<typeof getToolRegistry>, ctx: ToolContext, name: string, rawArgs: string): Promise<{ executed: ExecutedTool; output: string }> {

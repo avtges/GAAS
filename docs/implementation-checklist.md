@@ -11,56 +11,59 @@ Status legend: `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (s
 - [x] This checklist
 
 ## Phase 1 — Foundation
-- [ ] Next.js 16 + TS + Tailwind + App Router scaffold; `.env.example`
-- [ ] Supabase Auth (register, login, logout) via @supabase/ssr; proxy/middleware session refresh
-- [ ] Postgres access layer (`withUserDb`, `withServiceDb`), structured logger with redaction
-- [ ] Migrations: core tables, analytics tables, RLS policies, helper functions
-- [ ] Organization bootstrap (first org on signup), membership checks, website CRUD
-- [ ] Local Postgres test harness with `auth` shim; cross-tenant RLS tests (mandatory)
-- [ ] Rate limiting primitive
+- [x] Next.js 16 + TS + Tailwind + App Router scaffold; `.env.example`
+- [x] Supabase Auth (register, login, logout) via @supabase/ssr; proxy session refresh; dev-only local auth
+- [x] Postgres access layer (`withUserDb` under RLS, `withServiceDb`), structured logger with redaction
+- [x] Migrations: core tables, analytics tables, RLS policies, helper functions, token column grants
+- [x] Organization bootstrap, membership checks, website CRUD
+- [x] Local Postgres harness with `auth` shim; cross-tenant RLS tests
+- [x] Rate limiting primitive (in-memory; per-instance limitation documented)
 
 ## Phase 2 — Google OAuth
-- [ ] `/api/google/oauth/start` (state + PKCE in httpOnly cookie, incremental scopes)
-- [ ] `/api/google/oauth/callback` (state check, code exchange, scope recording, encrypted refresh token)
-- [ ] Token refresh helper; `invalid_grant` ⇒ revoked
-- [ ] Disconnect (revoke + delete); tests for state mismatch, denied consent, partial scopes
+- [x] Start route (state + PKCE in signed httpOnly cookie, incremental scopes)
+- [x] Callback (state/user check, code exchange, scope recording, encrypted refresh token)
+- [x] Token refresh helper; `invalid_grant` ⇒ connection and sources revoked
+- [x] Disconnect (revoke at Google + delete); tests for revoked, refresh caching, cross-tenant
+- [ ] Live verification against a real Google Cloud OAuth client (needs credentials)
 
-## Phase 3 — Search Console (vertical slice to chat)
-- [ ] Provider interface + LIVE + MOCK (sites.list, searchAnalytics.query with paging)
-- [ ] Property discovery UI + selection
-- [ ] Backfill 90 days → gsc_* tables; incremental with reconciliation window; data_through from firstIncompleteDate
-- [ ] One analytics function + one AI tool (`get_search_queries`) + chat answer with grounding metadata
+## Phase 3 — Search Console
+- [x] Provider interface + LIVE + MOCK (sites.list, searchAnalytics.query with paging)
+- [x] Property discovery and selection UI
+- [x] Resumable 90-day backfill; incremental with reconciliation window; data_through from firstIncompleteDate
+- [x] Analytics + tools + chat with grounding metadata
 
 ## Phase 4 — GA4
-- [ ] Provider (accountSummaries, properties.get, keyEvents.list, getMetadata, runReport with paging)
-- [ ] Runtime schema validation of dimension/metric names (guards U1)
-- [ ] Backfill/incremental → ga4_* tables; semantic config (business_conversion_event, revenue_event)
+- [x] Provider (accountSummaries, properties.get, keyEvents.list, getMetadata, runReport with paging)
+- [x] Runtime validation of dimension/metric names (guards U1)
+- [x] Backfill/incremental → ga4_* tables; semantic config (business_conversion_event, revenue_event)
 
 ## Phase 5 — Google Ads
-- [ ] Provider (listAccessibleCustomers, customer_client expansion, searchStream fixed GAQL)
-- [ ] Account discovery UI (manager → client accounts, login-customer-id)
-- [ ] Backfill/incremental → ads_* tables (cost in micros → currency units at read time)
+- [x] Provider (listAccessibleCustomers, customer_client expansion, searchStream with fixed GAQL)
+- [x] Account discovery UI (manager → client accounts, login-customer-id)
+- [x] Backfill/incremental → ads_* tables
 - [!] Requires a developer token with Basic access for real accounts (operational)
+- [ ] Confirm REST JSON casing with one live call (U10)
 
 ## Phase 6 — Analytics service
-- [ ] Period totals / comparisons / % change with zero guards / sample-size flags
-- [ ] Query opportunity score, wasted spend, brand split, top movers
-- [ ] Unit tests for every calculation
+- [x] Period totals, comparisons, % change with zero guards, small-sample warnings
+- [x] Query opportunity score, wasted spend, brand split, four-period baseline
+- [x] Unit tests for calculations
 
 ## Phase 7 — AI
-- [ ] Tool registry (Zod → strict JSON schema), server-context injection, bounded outputs
-- [ ] Responses API loop, mock client, grounding metadata builder, system prompt
-- [ ] Tests: schema strictness, authorization inside tools, insufficient-data disclosure
+- [x] 14 typed tools (Zod → strict JSON schema), server-context injection, bounded outputs
+- [x] Responses API loop (`store:false`), mock client, grounding metadata, system prompt
+- [x] Hallucination audit with one-round self-repair, shown under each answer
+- [ ] Live-model evaluation run (needs OPENAI_API_KEY); mock-model behaviour tests pass
 
 ## Phase 8 — UI
-- [ ] Sidebar (workspaces, connections, chats, settings), chat panel, status header, suggested questions
-- [ ] Connections page with three product rows, errors shown plainly
-- [ ] Settings: semantic configuration; Danger zone: disconnect Google, delete data (confirmed)
+- [x] Sidebar (websites, chat, connections, settings), chat with threads, status header, suggested questions
+- [x] Connections page: grant/selection per product, errors, Sync now, recent sync jobs
+- [x] Settings: semantic configuration; confirmed delete-data and delete-website
 
 ## Phase 9 — Tests & hardening
-- [ ] Unit (analytics, dates, semantic config) · Integration (sync normalization, tool validation, org authz)
-- [ ] Security (cross-tenant website/analytics/tool access, forged org IDs) · Sync-failure isolation · OAuth error handling
-- [ ] AI tests (tool selection, no fabrication, insufficient data) — live ones gated on OPENAI_API_KEY
+- [x] Unit, integration, security (cross-tenant DB, tools, chat, forged IDs), sync-failure isolation, OAuth errors, AI behaviour
+- [x] End-to-end browser walkthrough of the MVP definition of done in mock mode
+- [ ] Distributed rate limiting if deployed on more than one instance
 
 ## Blockers / assumptions not yet verified
 See "Unverified / must confirm before go-live" in docs/integration-verification.md (U1–U9).

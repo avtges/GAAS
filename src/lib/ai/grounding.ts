@@ -14,6 +14,8 @@ export type GroundingMetadata = {
   tools: Array<{ name: string; args: Record<string, unknown>; ok: boolean; error?: string }>;
   model: string | null;
   usage: { input_tokens: number; output_tokens: number } | null;
+  /** Hallucination audit of the final answer (set by the engine). */
+  audit?: { checked: boolean; supported: number; unsupported: string[]; repaired: boolean; initial_unsupported: string[] };
 };
 
 const LABELS: Record<Source, string> = { gsc: "Search Console", ga4: "GA4", ads: "Google Ads" };

@@ -53,6 +53,17 @@ export function GroundingFooter({ metadata }: { metadata: GroundingMetadata }) {
           <dd>{metadata.warnings.join(" ")}</dd>
         </>
       )}
+      {metadata.audit && (
+        <>
+          <dt>Audit</dt>
+          <dd className={metadata.audit.unsupported.length ? "text-amber-700" : ""}>
+            {metadata.audit.unsupported.length
+              ? `${metadata.audit.unsupported.length} figure(s) not found in the retrieved data`
+              : `${metadata.audit.supported} figure(s) checked against retrieved data`}
+            {metadata.audit.repaired ? " · answer was automatically corrected" : ""}
+          </dd>
+        </>
+      )}
       {metadata.tools.some((t) => !t.ok) && (
         <>
           <dt>Tool errors</dt>

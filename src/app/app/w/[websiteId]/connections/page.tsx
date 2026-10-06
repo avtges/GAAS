@@ -3,7 +3,8 @@ import { requireUser } from "@/lib/auth/session";
 import { listWebsiteSources, requireWebsiteAccess, type WebsiteSource } from "@/lib/websites/service";
 import { connectionProducts, getWebsiteConnection } from "@/lib/google/connections";
 import { ConfirmForm } from "@/components/confirm-form";
-import { disconnectGoogleAction } from "./actions";
+import { disconnectGoogleAction, syncNowAction } from "./actions";
+import { listRecentSyncJobs } from "@/lib/sources/select";
 import { getEnv } from "@/lib/env";
 
 const ERRORS: Record<string, string> = {
@@ -29,6 +30,7 @@ export default async function ConnectionsPage({ params, searchParams }: PageProp
   const { website, role } = await requireWebsiteAccess(user.id, websiteId);
   const sources = await listWebsiteSources(user.id, websiteId);
   const connection = await getWebsiteConnection(user.id, websiteId);
+  const jobs = await listRecentSyncJobs(user.id, websiteId, 8);
   const granted = connectionProducts(connection);
   const isAdmin = role === "owner" || role === "admin";
   const env = getEnv();
@@ -102,6 +104,12 @@ export default async function ConnectionsPage({ params, searchParams }: PageProp
                       Grant access
                     </Link>
                   )}
+                  {isAdmin && selected && (s.status === "ok" || s.status === "error") && (
+                    <form action={syncNowAction.bind(null, website.id)}>
+                      <input type="hidden" name="source" value={s.source} />
+                      <button className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50">Sync now</button>
+                    </form>
+                  )}
                   {hasScope && isAdmin && (
                     <Link href={`/app/w/${website.id}/connections/${s.source}`} className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50">
                       {selected ? "Change selection" : "Choose"}
@@ -113,6 +121,29 @@ export default async function ConnectionsPage({ params, searchParams }: PageProp
           );
         })}
       </section>
+
+      {jobs.length > 0 && (
+        <section className="rounded-lg border border-zinc-200 bg-white p-4">
+          <h3 className="mb-2 text-sm font-semibold">Recent syncs</h3>
+          <table className="w-full text-left text-xs">
+            <thead className="text-zinc-500">
+              <tr><th className="py-1">Source</th><th>Kind</th><th>Started</th><th>Status</th><th>Rows</th><th>Data through</th></tr>
+            </thead>
+            <tbody>
+              {jobs.map((j) => (
+                <tr key={j.id} className="border-t border-zinc-100 align-top" title={j.error_message ?? undefined}>
+                  <td className="py-1">{PRODUCT_LABEL[j.source]}</td>
+                  <td>{j.kind}</td>
+                  <td>{new Date(j.started_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</td>
+                  <td className={j.status === "failed" ? "text-red-700" : j.status === "running" ? "text-sky-700" : "text-emerald-700"}>{j.status}</td>
+                  <td>{j.rows_written.toLocaleString()}</td>
+                  <td>{j.data_through ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       {connection && isAdmin && (
         <section className="space-y-2">

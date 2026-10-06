@@ -203,6 +203,15 @@ describe("AI tools over all three sources", () => {
       expect(await pick("What changed over the last 30 days?")).toContain("compare_date_ranges");
     });
 
+    it("the mock model only emits schema-valid tool calls", async () => {
+      const { website } = await requireWebsiteAccess(a.userId, a.websiteId);
+      for (const q of ["What changed this week?", "Where are we wasting ad spend?", "What organic opportunities should I prioritize?", "Which landing pages are improving?", "Compare paid and organic acquisition.", "Which ad groups cost the most?", "How did mobile traffic do?", "What happened to traffic this month?", "Why did conversions fall last week?"]) {
+        const r = await runChatTurn({ userId: a.userId, website, history: [], message: q });
+        expect(r.executed.length, q).toBeGreaterThan(0);
+        for (const e of r.executed) expect(e.ok, `${q} → ${e.name}: ${e.error}`).toBe(true);
+      }
+    });
+
     it("grounding metadata reflects executed tools, not model text", async () => {
       const { website } = await requireWebsiteAccess(a.userId, a.websiteId);
       const r = await runChatTurn({ userId: a.userId, website, history: [], message: "Compare paid and organic traffic over the last 30 days" });
@@ -226,5 +235,44 @@ describe("AI tools over all three sources", () => {
       const r = await runChatTurn({ userId: c.userId, website, history: [], message: "Which Google Ads campaigns have the highest CPA?" });
       expect(r.content + JSON.stringify(r.grounding)).toMatch(/not connected|No campaigns/i);
     });
+  });
+});
+
+describe("hallucination self-repair", () => {
+  it("detects an invented figure, repairs once, and records the audit", async () => {
+    const { createTenant: ct } = await import("../setup/fixtures");
+    const t = await ct("audit");
+    const { website } = await requireWebsiteAccess(t.userId, t.websiteId);
+    let call = 0;
+    setChatClient({
+      async createResponse(req) {
+        call++;
+        if (call === 1) return { output: [{ type: "function_call", call_id: "c1", name: "get_sync_status", arguments: "{}" }], usage: null, model: "fake", responseId: null };
+        if (call === 2) return { output: [{ type: "message", text: "You had 4,821 conversions last month." }], usage: null, model: "fake", responseId: null };
+        expect(req.tools).toEqual([]);
+        expect(JSON.stringify(req.input)).toContain("4,821");
+        return { output: [{ type: "message", text: "No sources are connected yet, so conversion data is not available." }], usage: null, model: "fake", responseId: null };
+      },
+    });
+    const r = await runChatTurn({ userId: t.userId, website, history: [], message: "How many conversions did we get?" });
+    expect(call).toBe(3);
+    expect(r.content).not.toContain("4,821");
+    expect(r.grounding.audit).toMatchObject({ repaired: true, initial_unsupported: ["4,821"], unsupported: [] });
+    setChatClient(undefined);
+  });
+
+  it("labels the answer when the repair still contains unsupported figures", async () => {
+    const { createTenant: ct } = await import("../setup/fixtures");
+    const t = await ct("audit2");
+    const { website } = await requireWebsiteAccess(t.userId, t.websiteId);
+    setChatClient({
+      async createResponse() {
+        return { output: [{ type: "message", text: "Revenue grew 23% to $77,000." }], usage: null, model: "fake", responseId: null };
+      },
+    });
+    const r = await runChatTurn({ userId: t.userId, website, history: [], message: "How is revenue?" });
+    expect(r.grounding.audit?.unsupported.length).toBeGreaterThan(0);
+    expect(r.grounding.warnings.join(" ")).toMatch(/Unverified figures/);
+    setChatClient(undefined);
   });
 });

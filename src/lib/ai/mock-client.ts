@@ -43,19 +43,19 @@ export class MockChatClient implements ChatModelClient {
     if (/landing page|pages? (are|is)|which pages/.test(q) && /organic|search console|seo|google search/.test(q)) {
       want("get_search_pages", { ...range, limit: 10, sort_by: /improv|gain/.test(q) ? "impressions_change" : "clicks", min_impressions: 50, contains: null });
     } else if (/landing page|which pages/.test(q) && available.has("get_ga4_landing_pages")) {
-      want("get_ga4_landing_pages", { ...range, limit: 10, sort_by: /improv|gain/.test(q) ? "sessions_change" : "sessions", channel_group: null });
+      want("get_ga4_landing_pages", { ...range, limit: 10, sort_by: /improv|gain/.test(q) ? "sessions_change" : "sessions", min_sessions: 30 });
     }
     if (/quer|keyword|impressions but|weak ctr|low ctr|opportunit|brand/.test(q) && !/ads|paid|search term/.test(q)) {
       want("get_search_queries", { ...range, limit: 15, sort_by: /impressions but|weak ctr|low ctr|opportunit/.test(q) ? "opportunity" : /gain/.test(q) ? "impressions_change" : "clicks", min_impressions: 100, brand_filter: /non[- ]brand/.test(q) ? "non_brand" : /brand/.test(q) ? "brand" : "all", contains: null });
     }
     if (/search term|wasting|wasted spend/.test(q)) want("get_ads_search_terms", { ...range, limit: 15, sort_by: "wasted_spend", min_cost: 0 });
     if (/campaign|cpa|roas|ad spend|cost per/.test(q) && !/search term/.test(q)) want("get_ads_campaign_performance", { ...range, compare_with_previous_period: true, sort_by: /cpa/.test(q) ? "cpa" : "cost", limit: 15 });
-    if (/ad group/.test(q)) want("get_ads_ad_group_performance", { ...range, sort_by: "cost", limit: 15 });
+    if (/ad group/.test(q)) want("get_ads_ad_group_performance", { ...range, sort_by: "cost", campaign_id: null, limit: 15 });
     if (/keyword/.test(q) && /ads|paid/.test(q)) want("get_ads_keyword_performance", { ...range, sort_by: "cost", limit: 15 });
     if (/paid (and|vs|versus) organic|organic (and|vs|versus) paid|compare paid|compare channels|channel/.test(q)) want("compare_channels", { ...range, compare_with_previous_period: true });
     if (/conversion|purchase|subscri|sign ?up|lead/.test(q) && !/ads|campaign/.test(q)) want("get_ga4_business_conversions", { ...range, compare_with_previous_period: true });
     if (/device|mobile|desktop/.test(q)) want(available.has("get_ga4_devices") && !/search console|organic/.test(q) ? "get_ga4_devices" : "get_search_performance", available.has("get_ga4_devices") && !/search console|organic/.test(q) ? { ...range, compare_with_previous_period: true } : { ...range, compare_with_previous_period: true, breakdown: "device" });
-    if (/traffic|sessions|users|acquisition|source|medium/.test(q) && available.has("get_ga4_acquisition") && !/organic only|search console/.test(q)) want("get_ga4_acquisition", { ...range, compare_with_previous_period: true, group_by: "channel_group", limit: 15 });
+    if (/traffic|sessions|users|acquisition|source|medium/.test(q) && available.has("get_ga4_acquisition") && !/organic only|search console/.test(q)) want("get_ga4_acquisition", { ...range, compare_with_previous_period: true, group_by: "channel_group", channel_group: null, limit: 15 });
     if (/what changed|compare|vs|previous|trend|happened|traffic|organic|search performance|clicks|impressions/.test(q) || calls.length === 0) {
       if (/what changed|happened/.test(q) && available.has("compare_date_ranges")) {
         want("compare_date_ranges", { ...range, compare_with: "previous_period" });
@@ -100,6 +100,20 @@ export class MockChatClient implements ChatModelClient {
               .join("; ") +
             ".",
         );
+      }
+      const SKIP = new Set(["source", "source_label", "measurement", "date_range", "comparison_range", "data_through", "filters", "warnings", "totals", "previous_totals", "changes", "rows", "sources", "sources_used", "notes", "baseline_ranges", "brand_queries_configured", "observed_events", "semantic_configuration"]);
+      const isChange = (v: unknown): v is { current: number; previous: number; pct_change: number | null } => !!v && typeof v === "object" && "current" in (v as object) && "previous" in (v as object);
+      const fmtChange = (k: string, c: { current: number; previous: number; pct_change: number | null }) => `${k} ${c.previous} → ${c.current}${c.pct_change === null ? " (no baseline)" : ` (${c.pct_change > 0 ? "+" : ""}${c.pct_change}%)`}`;
+      for (const [k, v] of Object.entries(data)) {
+        if (SKIP.has(k) || v === null || v === undefined) continue;
+        if (typeof v !== "object") lines.push(`${k}: ${String(v)}`);
+        else if (isChange(v)) lines.push(fmtChange(k, v));
+        else if (!Array.isArray(v)) {
+          const inner = Object.entries(v as Record<string, unknown>)
+            .map(([ik, iv]) => (isChange(iv) ? fmtChange(ik, iv) : iv !== null && typeof iv !== "object" ? `${ik} ${String(iv)}` : null))
+            .filter(Boolean);
+          if (inner.length) lines.push(`${k}: ${inner.join("; ")}`);
+        }
       }
       if (rows && rows.length) {
         const keys = Object.keys(rows[0]).filter((k) => typeof rows[0][k] !== "object").slice(0, 6);

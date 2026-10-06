@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GAAS — talk to your marketing data
 
-## Getting Started
+A read-only, multi-tenant MVP that connects **Google Search Console**, **Google Analytics 4**
+and **Google Ads**, keeps their data synchronized in Postgres, and answers natural-language
+questions through an AI chat that is grounded only in the connected data.
 
-First, run the development server:
+- Architecture: [`docs/architecture.md`](docs/architecture.md)
+- What was verified against official sources, and what was not: [`docs/integration-verification.md`](docs/integration-verification.md)
+- Schema: [`docs/schema.md`](docs/schema.md) and [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql)
+- Status and remaining work: [`docs/implementation-checklist.md`](docs/implementation-checklist.md)
+
+## Run locally without any credentials (mock mode)
+
+Requires Node 22+ and a local Postgres 16 superuser (`postgres:postgres@127.0.0.1:5432`).
 
 ```bash
+npm install
+TEST_DATABASE_NAME=gaas_dev ./scripts/test-db.sh   # creates gaas_dev with a Supabase shim + migrations
+cp .env.example .env.local                        # then set:
+#   AUTH_MODE=local  GOOGLE_PROVIDER_MODE=mock  OPENAI_MODE=mock
+#   DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/gaas_dev
+#   TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000, sign in with any email (dev-only auth), add a website, click
+**Connect Google**, choose the mock Search Console property, GA4 property and Ads account,
+and ask questions. Mock providers return deterministic fixtures through the same interfaces
+and normalization code as the live providers. The mock model routes questions to tools by
+keyword and reports observations only.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Tests
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm test          # creates a throwaway gaas_test database, applies migrations, runs vitest
+npm run lint
+npm run typecheck
+```
 
-## Learn More
+The suite includes the mandatory cross-tenant tests (RLS and application layer), sync
+normalization and failure isolation per source, OAuth error handling, metric calculations,
+strict tool-schema validity, tool authorization, and AI behaviour tests (tool routing,
+grounding metadata, no unsupported numbers, missing-configuration disclosure, and the
+hallucination self-repair loop).
 
-To learn more about Next.js, take a look at the following resources:
+## Production setup
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. **Supabase**: create a project; apply `supabase/migrations/*.sql` (never the shim);
+   set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `DATABASE_URL`
+   (pooler connection string). Set `AUTH_MODE=supabase`.
+2. **Google Cloud**: enable the Search Console API, Google Analytics Data API, Google
+   Analytics Admin API and Google Ads API; configure the OAuth consent screen; create a Web
+   OAuth client with redirect URI `<APP_URL>/api/google/oauth/callback`. While the consent
+   screen is in *Testing*, only listed test users can connect and refresh tokens expire after
+   7 days. Public use requires sensitive-scope verification.
+3. **Google Ads**: get a developer token from a Google Ads **manager** account (API Center)
+   and apply for **Basic access**; test-level tokens cannot read real accounts.
+4. **OpenAI**: set `OPENAI_API_KEY` and optionally `OPENAI_MODEL`; set `OPENAI_MODE=live`.
+5. Generate `TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`) and `CRON_SECRET`.
+6. **Scheduling**: `vercel.json` calls `/api/cron/sync` hourly (requires a Vercel plan that
+   allows hourly crons; Hobby allows daily). Any scheduler can call it with
+   `Authorization: Bearer $CRON_SECRET`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Every variable is documented in [`.env.example`](.env.example).

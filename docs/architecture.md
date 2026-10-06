@@ -169,6 +169,9 @@ detection (cost with zero conversions over the window), brand/non-brand split us
 - **Grounding metadata** is built server-side from the executed tool calls (sources,
   date ranges, comparison ranges, filters, data_through per source) and saved on the
   assistant message. The UI renders it under every answer. The model cannot fabricate it.
+- **Hallucination audit**: after the model answers, every figure is checked against the
+  tool results of that turn. Unsupported figures trigger one repair round; anything still
+  unsupported is flagged as "Unverified figures" in the answer's caveats and audit line.
 - The system prompt encodes the answer rules (never invent metrics, separate observation
   from hypothesis, disclose sample sizes and freshness, label attribution systems, do not
   combine incompatible numbers).

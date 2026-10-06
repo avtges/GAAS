@@ -149,3 +149,24 @@ describe("google connections", () => {
     expect(Object.fromEntries(src.rows.map((r) => [r.source, r.status]))).toEqual({ ads: "not_configured", ga4: "not_configured", gsc: "disconnected" });
   });
 });
+
+describe("delete website data", () => {
+  it("removes analytics, chats and credentials; refuses other tenants", async () => {
+    const { createTenant: ct, seedGscTotals } = await import("../setup/fixtures");
+    const { deleteWebsiteData } = await import("@/lib/websites/delete");
+    const t = await ct("delete-me");
+    const other = await ct("other");
+    await seedGscTotals(t, 5);
+    await saveConnectionFromOAuth({ userId: t.userId, websiteId: t.websiteId, googleUserId: "del-g", googleEmail: null, refreshToken: "1//del", grantedScopes: ["openid"], accessTokenExpiry: new Date() });
+    await withServiceDb((db) => db.query("insert into public.chat_threads (organization_id, website_id, created_by) values ($1, $2, $3)", [t.orgId, t.websiteId, t.userId]));
+    await expect(deleteWebsiteData(other.userId, t.websiteId)).rejects.toThrow(/not found/);
+    const r = await deleteWebsiteData(t.userId, t.websiteId);
+    expect(r.credentialsRemoved).toBe(true);
+    const left = await withServiceDb(async (db) => ({
+      gsc: Number((await db.query("select count(*) from public.gsc_daily_totals where website_id = $1", [t.websiteId])).rows[0].count),
+      chats: Number((await db.query("select count(*) from public.chat_threads where website_id = $1", [t.websiteId])).rows[0].count),
+      conns: Number((await db.query("select count(*) from public.google_connections where organization_id = $1", [t.orgId])).rows[0].count),
+    }));
+    expect(left).toEqual({ gsc: 0, chats: 0, conns: 0 });
+  });
+});
