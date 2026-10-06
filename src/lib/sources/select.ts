@@ -9,7 +9,7 @@ import { getGoogleAdsProvider, type AdsAccount } from "@/lib/providers/google-ad
 import { GoogleApiError } from "@/lib/providers/errors";
 import { isValidTimeZone } from "@/lib/dates";
 import { requireWebsiteAccess, requireWebsiteAdmin, type Source } from "@/lib/websites/service";
-import { runSync } from "@/lib/sync/runner";
+import { runUntilComplete } from "@/lib/sync/runner";
 import { log } from "@/lib/logger";
 
 const SOURCE_TABLES: Record<Source, string[]> = {
@@ -66,17 +66,27 @@ export async function selectGscProperty(userId: string, websiteId: string, input
 export function scheduleImmediateSync(websiteId: string, source: Source): void {
   try {
     after(async () => {
-      await runSync(websiteId, source, { budgetMs: 50_000 });
+      // Within Vercel's 300s Fluid-compute limit; anything left resumes on the next run.
+      await runUntilComplete(websiteId, source, { totalBudgetMs: 240_000 });
     });
   } catch {
     // Outside a request scope (e.g. tests): the cron picks it up via next_sync_at.
   }
 }
 
-export async function requestSyncNow(userId: string, websiteId: string, source: Source): Promise<{ status: string; error?: string }> {
+/** Starts a sync in the background and returns immediately; the status bar shows progress. */
+export async function requestSyncNow(userId: string, websiteId: string, source: Source): Promise<{ status: string }> {
   await requireWebsiteAdmin(userId, websiteId);
-  const r = await runSync(websiteId, source, { budgetMs: 50_000, force: true });
-  return { status: r.status, error: r.error };
+  try {
+    after(async () => {
+      await runUntilComplete(websiteId, source, { totalBudgetMs: 240_000, force: true });
+    });
+    return { status: "started" };
+  } catch {
+    // Outside a request scope (tests/scripts): run inline.
+    const r = await runUntilComplete(websiteId, source, { totalBudgetMs: 240_000, force: true });
+    return { status: r.status };
+  }
 }
 
 export type SyncJobRow = { id: string; source: Source; kind: string; status: string; started_at: string; finished_at: string | null; rows_written: number; error_message: string | null; data_through: string | null; duration_ms: number | null };

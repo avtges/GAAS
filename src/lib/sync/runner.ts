@@ -131,8 +131,24 @@ function classify(e: unknown): { message: string; status: "error" | "revoked" } 
   return { message: e instanceof Error ? e.message : String(e), status: "error" };
 }
 
-/** Cron entry point: process due sources, oldest first, within a batch size. */
-export async function runDueSyncs(opts: { batchSize?: number; budgetMs?: number } = {}): Promise<Array<{ websiteId: string; source: Source } & RunSyncResult>> {
+/**
+ * Keeps syncing one source until its backfill is complete or the total budget runs out.
+ * Each pass resumes from the saved cursor, so a 90-day import finishes across passes.
+ */
+export async function runUntilComplete(websiteId: string, source: Source, opts: { totalBudgetMs: number; force?: boolean }): Promise<RunSyncResult> {
+  const deadline = Date.now() + opts.totalBudgetMs;
+  let last: RunSyncResult = { status: "skipped" };
+  let first = true;
+  while (Date.now() < deadline - 5_000) {
+    last = await runSync(websiteId, source, { budgetMs: Math.min(60_000, deadline - Date.now() - 5_000), force: first && opts.force });
+    first = false;
+    if (last.status !== "succeeded" || last.outcome?.complete !== false) break;
+  }
+  return last;
+}
+
+/** Cron entry point: process due sources, oldest first, within a batch size and total time budget. */
+export async function runDueSyncs(opts: { batchSize?: number; budgetMs?: number; totalBudgetMs?: number } = {}): Promise<Array<{ websiteId: string; source: Source } & RunSyncResult>> {
   const env = getEnv();
   const due = await withServiceDb((db) =>
     many<{ website_id: string; source: Source }>(
@@ -144,8 +160,11 @@ export async function runDueSyncs(opts: { batchSize?: number; budgetMs?: number 
     ),
   );
   const results = [];
+  const deadline = Date.now() + (opts.totalBudgetMs ?? Number.POSITIVE_INFINITY);
   for (const d of due) {
-    const r = await runSync(d.website_id, d.source, { budgetMs: opts.budgetMs });
+    const remaining = deadline - Date.now();
+    if (remaining < 10_000) break; // leave the rest for the next tick
+    const r = await runSync(d.website_id, d.source, { budgetMs: Math.min(opts.budgetMs ?? DEFAULT_BUDGET_MS, remaining - 5_000) });
     results.push({ websiteId: d.website_id, source: d.source, ...r });
   }
   return results;

@@ -514,6 +514,7 @@ grant select, insert, update, delete on all tables in schema public to authentic
 -- table-level grant with column-level grants that exclude it. (A column-level REVOKE
 -- would not override a table-level GRANT.)
 revoke all on public.google_connections from authenticated;
+revoke all on public.google_connections from anon;
 grant select (id, organization_id, google_user_id, google_email, granted_scopes,
               access_token_expiry, status, last_error, created_by, created_at, updated_at)
   on public.google_connections to authenticated;

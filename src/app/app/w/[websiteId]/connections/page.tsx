@@ -1,3 +1,6 @@
+// Server actions on this page can run a background sync (and chat calls the AI model).
+export const maxDuration = 300;
+
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/session";
 import { listWebsiteSources, requireWebsiteAccess, type WebsiteSource } from "@/lib/websites/service";

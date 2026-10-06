@@ -3,7 +3,8 @@ import { timingSafeEqual } from "node:crypto";
 import { getEnv } from "@/lib/env";
 import { runDueSyncs } from "@/lib/sync/runner";
 
-export const maxDuration = 300;
+// 60s is allowed on every Vercel plan, with or without Fluid compute.
+export const maxDuration = 60;
 
 /**
  * Scheduled sync endpoint. Vercel Cron (or any scheduler) calls it with
@@ -17,6 +18,6 @@ export async function GET(request: NextRequest) {
   const a = Buffer.from(header);
   const b = Buffer.from(expected);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const results = await runDueSyncs({ budgetMs: 200_000 });
+  const results = await runDueSyncs({ budgetMs: 45_000, totalBudgetMs: 50_000 });
   return NextResponse.json({ processed: results.length, results });
 }

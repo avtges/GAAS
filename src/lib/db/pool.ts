@@ -15,14 +15,46 @@ import { getEnv } from "@/lib/env";
 
 let pool: Pool | undefined;
 
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+const SSL_PARAMS = ["sslmode", "sslrootcert", "sslcert", "sslkey", "uselibpqcompat", "ssl"];
+
+/**
+ * TLS settings for the database connection.
+ * - Local hosts: no TLS.
+ * - DATABASE_SSL_CA set (PEM, or base64 of PEM): TLS with full certificate verification.
+ *   Supabase signs database certificates with its own CA; download it from
+ *   Project Settings → Database → SSL Configuration.
+ * - Otherwise for remote hosts: TLS without certificate verification (traffic is encrypted
+ *   but the server identity is not checked). A warning is logged once.
+ * SSL parameters in the URL are removed because node-postgres lets them override these
+ * options (and treats sslmode=require as verify-full, which fails against Supabase's CA).
+ */
+export function pgConnectionConfig(databaseUrl: string, caInput?: string): { connectionString: string; ssl: false | { rejectUnauthorized: boolean; ca?: string } } {
+  const url = new URL(databaseUrl);
+  if (LOCAL_HOSTS.has(url.hostname)) return { connectionString: databaseUrl, ssl: false };
+  for (const k of SSL_PARAMS) url.searchParams.delete(k);
+  const connectionString = url.toString();
+  if (caInput && caInput.trim()) {
+    const ca = caInput.includes("BEGIN CERTIFICATE") ? caInput : Buffer.from(caInput, "base64").toString("utf8");
+    if (!ca.includes("BEGIN CERTIFICATE")) throw new Error("DATABASE_SSL_CA must be a PEM certificate (or base64 of one).");
+    return { connectionString, ssl: { rejectUnauthorized: true, ca } };
+  }
+  return { connectionString, ssl: { rejectUnauthorized: false } };
+}
+
 export function getPool(): Pool {
   if (!pool) {
     const env = getEnv();
+    const conn = pgConnectionConfig(env.DATABASE_URL, env.DATABASE_SSL_CA);
+    if (conn.ssl && !conn.ssl.ca) {
+      console.warn(JSON.stringify({ level: "warn", msg: "database TLS is encrypted but the server certificate is not verified; set DATABASE_SSL_CA to verify it" }));
+    }
     pool = new Pool({
-      connectionString: env.DATABASE_URL,
+      connectionString: conn.connectionString,
+      ssl: conn.ssl,
       max: 5,
       idleTimeoutMillis: 30_000,
-      // Supabase requires TLS; local Postgres does not. The URL's sslmode decides.
+      connectionTimeoutMillis: 10_000,
     });
     pool.on("error", (err) => {
       console.error(JSON.stringify({ level: "error", msg: "pg pool error", error: err.message }));

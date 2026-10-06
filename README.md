@@ -68,6 +68,8 @@ hallucination self-repair loop).
 
 ## Production setup
 
+**Step-by-step guide: [`docs/deploy-vercel.md`](docs/deploy-vercel.md).** Summary:
+
 1. **Supabase**: create a project; apply `supabase/migrations/*.sql` (never the shim);
    set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `DATABASE_URL`
    (pooler connection string). Set `AUTH_MODE=supabase`.
@@ -80,8 +82,8 @@ hallucination self-repair loop).
    and apply for **Basic access**; test-level tokens cannot read real accounts.
 4. **OpenAI**: set `OPENAI_API_KEY` and optionally `OPENAI_MODEL`; set `OPENAI_MODE=live`.
 5. Generate `TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`) and `CRON_SECRET`.
-6. **Scheduling**: `vercel.json` calls `/api/cron/sync` hourly (requires a Vercel plan that
-   allows hourly crons; Hobby allows daily). Any scheduler can call it with
+6. **Scheduling**: `vercel.json` calls `/api/cron/sync` daily, which the Hobby plan
+   allows; on Pro you can make it hourly. Any scheduler can call it with
    `Authorization: Bearer $CRON_SECRET`.
 
 Every variable is documented in [`.env.example`](.env.example).

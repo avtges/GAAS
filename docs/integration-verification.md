@@ -154,7 +154,7 @@ from a machine with normal network access.
 
 - **Docs:** https://vercel.com/docs/cron-jobs , https://vercel.com/docs/cron-jobs/usage-and-pricing
 - **Verified from:** search-engine snippets of the official page only (page blocked offline) — see Unverified.
-- **Configuration:** `vercel.json` `{ "crons": [{ "path": "/api/cron/sync", "schedule": "0 * * * *" }] }`; Vercel sends `Authorization: Bearer $CRON_SECRET`; the route rejects anything else with 401.
+- **Configuration:** `vercel.json` `{ "crons": [{ "path": "/api/cron/sync", "schedule": "17 6 * * *" }] }` (daily, so deploys succeed on Hobby); Vercel sends `Authorization: Bearer $CRON_SECRET`; the route rejects anything else with 401. The route sets `maxDuration = 60` (allowed on every plan); with Fluid compute, Hobby functions may run up to 300s, which the background "sync until complete" path uses.
 - **Limits reported by the docs:** Hobby plan allows cron jobs that run at most once per day (hourly expressions fail deployment) and invocation time is imprecise within the hour; Pro allows frequent schedules. Function execution time limits apply, so each cron invocation processes a bounded batch of due sync jobs and the rest wait for the next tick. A manual "Sync now" button and a `curl`-able endpoint cover non-Vercel deployments.
 
 ---
@@ -180,7 +180,7 @@ detect an unsupported causal claim, which is handled by the system prompt rules.
 | U4 | Exact Search Console quota numbers (1,200 QPM/site/user etc.) | Sync pacing. | Syncs are serial per website and retry with backoff on 429/503. |
 | U5 | Exact Google Ads API rate limits and GAQL grammar page | Query correctness. | Queries are fixed, small, and exercised in LIVE mode during Phase 5 with a test account; any `INVALID_ARGUMENT`/`QUERY_ERROR` surfaces as a sync error with the Google message. |
 | U6 | Whether `segments.conversion_action_name` can be combined with non-conversion metrics in one GAQL query | Conversion-action breakdown table. | The conversion-action query selects conversion metrics only. |
-| U7 | Vercel cron plan limits and `CRON_SECRET` header behaviour | Scheduling frequency. | Endpoint also callable by any scheduler with the bearer secret. |
+| U7 | Vercel cron plan limits and `CRON_SECRET` header behaviour (daily-only on Hobby and the 300s Fluid-compute limit confirmed via search snippets of vercel.com/docs) | Scheduling frequency. | Endpoint also callable by any scheduler with the bearer secret. |
 | U8 | OpenAI model availability/pricing for the configured model | Cost. | `OPENAI_MODEL` env var; failures surface as chat errors with no fabricated answer. |
 | U10 | Google Ads REST JSON field casing (camelCase, int64 as strings) in `searchStream` responses | The official library is gRPC-only, so the REST JSON shape was inferred from the standard proto3 JSON mapping. | Every row is Zod-validated (`src/lib/sync/ads-normalize.ts`); a shape mismatch fails the Ads sync with the exact field path and leaves other sources untouched. Confirm with one live call to a test account. |
 | U11 | Whether `search_term_view` returns rows for Performance Max campaigns | Affects "wasted spend" coverage. | The tool warns that PMax and some campaign types may not report search terms. |
