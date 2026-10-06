@@ -118,6 +118,7 @@ create table public.website_sources (
   status text not null default 'not_configured'
     check (status in ('not_configured','ok','syncing','error','revoked','disconnected')),
   backfill_done boolean not null default false,
+  backfill_cursor date,                   -- next day to import during a resumable backfill
   last_sync_started_at timestamptz,
   last_sync_succeeded_at timestamptz,
   data_through date,

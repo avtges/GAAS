@@ -30,6 +30,7 @@ export type WebsiteSource = {
   source: Source;
   status: "not_configured" | "ok" | "syncing" | "error" | "revoked" | "disconnected";
   backfill_done: boolean;
+  backfill_cursor: string | null;
   last_sync_started_at: string | null;
   last_sync_succeeded_at: string | null;
   data_through: string | null;
@@ -108,7 +109,7 @@ export async function listWebsiteSources(userId: string, websiteId: string): Pro
   return withUserDb(userId, (db) =>
     many<WebsiteSource>(
       db,
-      `select website_id, source, status, backfill_done, last_sync_started_at, last_sync_succeeded_at,
+      `select website_id, source, status, backfill_done, backfill_cursor::text as backfill_cursor, last_sync_started_at, last_sync_succeeded_at,
               data_through::text as data_through, last_error, next_sync_at, limitations
        from public.website_sources where website_id = $1
        order by case source when 'gsc' then 1 when 'ga4' then 2 else 3 end`,
