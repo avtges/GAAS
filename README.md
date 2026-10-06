@@ -9,6 +9,19 @@ questions through an AI chat that is grounded only in the connected data.
 - Schema: [`docs/schema.md`](docs/schema.md) and [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql)
 - Status and remaining work: [`docs/implementation-checklist.md`](docs/implementation-checklist.md)
 
+## Try it in your browser (GitHub Codespaces, nothing to install)
+
+1. On the repository page on GitHub, click **Code**, then the **Codespaces** tab, then
+   **Create codespace on** this branch.
+2. Wait for setup to finish (a few minutes the first time). It installs Postgres and the
+   npm packages, creates the database, and writes a mock-mode `.env.local` for you.
+3. In the terminal at the bottom, run `npm run dev`. A browser tab opens with the app; if it
+   doesn't, open the **Ports** tab and click the globe icon next to port 3000.
+4. Sign in with any email and follow the checklist in the next section.
+
+Run the automated tests in the same terminal with `npm test`. Stop the codespace from
+github.com/codespaces when you're done so it doesn't use your free hours.
+
 ## Run locally without any credentials (mock mode)
 
 Requires Node 22+ and a local Postgres 16 superuser (`postgres:postgres@127.0.0.1:5432`).

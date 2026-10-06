@@ -24,7 +24,7 @@ const Query = z.object({
  */
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
-  if (!user) return NextResponse.redirect(new URL("/login", request.url));
+  if (!user) return NextResponse.redirect(new URL("/login", getEnv().APP_URL));
   const parsed = Query.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!parsed.success) return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
   const { websiteId, products } = parsed.data;

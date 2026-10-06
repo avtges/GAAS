@@ -1,0 +1,14 @@
+{
+  "name": "GAAS (mock mode, runs in your browser)",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22-bookworm",
+  "hostRequirements": { "cpus": 2, "memory": "4gb" },
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": { "label": "GAAS app", "onAutoForward": "openBrowser" }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "sudo service postgresql start || true",
+  "customizations": {
+    "codespaces": { "openFiles": ["README.md"] }
+  }
+}
